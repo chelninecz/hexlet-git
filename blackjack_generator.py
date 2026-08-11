@@ -1,529 +1,210 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Генератор Excel файла для игры Блэкджек без VBA.
-Все вычисления выполняются формулами Excel.
+Генератор файла Blackjack_Formulas_Only.xlsx
+Игра Блэкджек в Excel только на формулах, без VBA
 """
 
+import openpyxl
 from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, Border, Side, PatternFill, Color
-from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.formatting.rule import FormulaRule
-from openpyxl.utils.exceptions import IllegalCharacterError
+from openpyxl.styles import PatternFill, Font, Alignment
 from openpyxl.workbook.defined_name import DefinedName
 
-def create_blackjack_excel():
+def add_defined_name(wb, name, formula, local_sheet=None):
+    """Добавляет именованный диапазон с формулой"""
+    defn = DefinedName(name, attr_text=formula)
+    if local_sheet:
+        defn.localSheetId = local_sheet
+    wb.defined_names[name] = defn
+
+def create_blackjack_file(filename='Blackjack_Formulas_Only.xlsx'):
+    # Создаем новую книгу
     wb = Workbook()
     ws = wb.active
-    ws.title = "Game"
-    
+    ws.title = 'Game'
+
     # Настройка стилей
-    header_font = Font(bold=True, size=12)
-    title_font = Font(bold=True, size=14, color="000080")
-    result_font = Font(bold=True, size=16)
-    cell_alignment = Alignment(horizontal='center', vertical='center')
-    left_alignment = Alignment(horizontal='left', vertical='center')
-    
-    thin_border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
-    )
-    
-    green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-    red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-    yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
-    blue_fill = PatternFill(start_color="D6EAF8", end_color="D6EAF8", fill_type="solid")
-    
-    # === ЗАГОЛОВОК ===
-    ws.merge_cells('A1:E1')
-    ws['A1'] = 'БЛЭКДЖЕК - Игра на формулах Excel'
-    ws['A1'].font = title_font
-    ws['A1'].alignment = cell_alignment
-    
-    # === ВХОДНЫЕ ДАННЫЕ ===
-    ws['A3'] = 'Seed для новой игры:'
-    ws['A3'].font = header_font
-    ws['B3'] = 12345  # Начальное значение seed
-    ws['B3'].alignment = cell_alignment
-    
-    ws['A4'] = 'Карт игрока (Hit):'
-    ws['A4'].font = header_font
-    ws['B4'] = 2  # Начальное количество карт
-    ws['B4'].alignment = cell_alignment
-    
-    ws['A5'] = 'Stand (остановиться):'
-    ws['A5'].font = header_font
-    ws['B5'] = False
-    ws['B5'].alignment = cell_alignment
-    
+    title_font = Font(bold=True, size=14)
+    cell_alignment = Alignment(horizontal='left', vertical='center')
+
+    # === ЗАГОЛОВКИ И ВХОДНЫЕ ЯЧЕЙКИ ===
+    ws['A1'] = 'Seed для новой игры'
+    ws['B1'] = 12345
+    ws['A2'] = 'Карт игрока'
+    ws['B2'] = 2
+    ws['A3'] = 'Stand (TRUE/FALSE)'
+    ws['B3'] = False
+
+    # Форматирование входных ячеек
+    for cell in ['B1', 'B2', 'B3']:
+        ws[cell].font = Font(size=11, bold=True)
+        ws[cell].alignment = cell_alignment
+
     # Проверка данных для Seed
+    from openpyxl.worksheet.datavalidation import DataValidation
     dv_seed = DataValidation(type='whole', operator='between', formula1='1', formula2='1000000', allow_blank=False)
     dv_seed.error = 'Введите целое число от 1 до 1000000'
     dv_seed.errorTitle = 'Неверное значение Seed'
     ws.add_data_validation(dv_seed)
-    dv_seed.add('B3')
-    
-    # Проверка данных для количества карт игрока
-    dv_player_n = DataValidation(type='whole', operator='between', formula1='2', formula2='20', allow_blank=False)
-    dv_player_n.error = 'Введите целое число от 2 до 20'
-    dv_player_n.errorTitle = 'Неверное количество карт'
-    ws.add_data_validation(dv_player_n)
-    dv_player_n.add('B4')
-    
-    # Проверка данных для Stand (булево)
-    dv_stand = DataValidation(type='list', formula1='"FALSE,TRUE"', allow_blank=False)
-    dv_stand.error = 'Выберите FALSE или TRUE'
+    dv_seed.add('B1')
+
+    # Проверка данных для карт игрока
+    dv_cards = DataValidation(type='whole', operator='between', formula1='2', formula2='20', allow_blank=False)
+    dv_cards.error = 'Введите целое число от 2 до 20'
+    dv_cards.errorTitle = 'Неверное количество карт'
+    ws.add_data_validation(dv_cards)
+    dv_cards.add('B2')
+
+    # Проверка данных для Stand
+    dv_stand = DataValidation(type='list', formula1='"TRUE,FALSE"', allow_blank=False)
+    dv_stand.error = 'Введите TRUE или FALSE'
     dv_stand.errorTitle = 'Неверное значение Stand'
     ws.add_data_validation(dv_stand)
-    dv_stand.add('B5')
-    
-    # === РАЗДЕЛИТЕЛЬ ===
-    ws['A7'] = '=' * 50
-    ws['A7'].font = Font(color="808080")
-    
-    # === ВЫХОДНЫЕ ДАННЫЕ - ИГРОК ===
-    ws['A8'] = '=== РУКА ИГРОКА ==='
-    ws['A8'].font = header_font
-    
-    ws['A9'] = 'Карты игрока:'
-    ws['B9'] = ''  # Будет заполнено формулой
-    ws['B9'].font = Font(size=14)
-    
+    dv_stand.add('B3')
+
+    # Разделитель
+    ws['A5'] = '=' * 50
+
+    # === БЛОК РЕЗУЛЬТАТОВ ===
+    ws['A7'] = '=== РЕЗУЛЬТАТЫ ИГРЫ ==='
+    ws['A7'].font = title_font
+
+    ws['A9'] = 'Рука игрока:'
+    ws['C9'] = '=PlayerHandDisplay'
+
     ws['A10'] = 'Очки игрока:'
-    ws['B10'] = ''  # Будет заполнено формулой
-    ws['B10'].font = result_font
-    
-    # === РАЗДЕЛИТЕЛЬ ===
-    ws['A12'] = '=' * 50
-    ws['A12'].font = Font(color="808080")
-    
-    # === ВЫХОДНЫЕ ДАННЫЕ - ДИЛЕР ===
-    ws['A13'] = '=== РУКА ДИЛЕРА ==='
-    ws['A13'].font = header_font
-    
-    ws['A14'] = 'Карта дилера (видимая):'
-    ws['B14'] = ''  # Будет заполнено формулой
-    ws['B14'].font = Font(size=14)
-    
-    ws['A15'] = 'Карты дилера (после Stand):'
-    ws['B15'] = ''  # Будет заполнено формулой
-    ws['B15'].font = Font(size=14)
-    
-    ws['A16'] = 'Очки дилера:'
-    ws['B16'] = ''  # Будет заполнено формулой
-    ws['B16'].font = result_font
-    
-    # === РАЗДЕЛИТЕЛЬ ===
-    ws['A18'] = '=' * 50
-    ws['A18'].font = Font(color="808080")
-    
-    # === РЕЗУЛЬТАТ ===
-    ws['A19'] = '=== РЕЗУЛЬТАТ ==='
-    ws['A19'].font = header_font
-    
-    ws['A20'] = 'Статус игры:'
-    ws['B20'] = ''  # Будет заполнено формулой
-    ws['B20'].font = result_font
-    ws['B20'].alignment = left_alignment
-    
-    # === ИНСТРУКЦИЯ ===
-    ws['A22'] = '=== КАК ИГРАТЬ ==='
-    ws['A22'].font = header_font
-    
-    instructions = [
-        '1. Измените Seed (ячейка B3) для начала новой игры',
-        '2. Увеличивайте количество карт (B4) чтобы взять карту (Hit)',
-        '3. Установите Stand=TRUE (B5) когда решите остановиться',
-        '4. Для новой игры: измените Seed и сбросьте карты на 2, Stand на FALSE',
-        '',
-        'Правила:',
-        '- Туз = 11 или 1 (автоматически)',
-        '- Карты 2-10 = по номиналу',
-        '- J, Q, K = 10',
-        '- Дилер берёт до 17 очков',
-        '- Победа при > очков чем у дилера (без перебора)'
-    ]
-    
-    for i, instr in enumerate(instructions):
-        ws[f'A{23+i}'] = instr
-        ws[f'A{23+i}'].font = Font(size=10)
-    
-    # === СЛУЖЕБНАЯ ОБЛАСТЬ (скрытая логика) ===
-    start_col = 'G'
-    row_offset = 1
-    
-    ws[f'{start_col}{row_offset}'] = '=== СЛУЖЕБНАЯ ОБЛАСТЬ ==='
-    ws[f'{start_col}{row_offset}'].font = header_font
-    row_offset += 2
-    
-    # Именованные диапазоны будут созданы позже
-    # Здесь размещаем вспомогательные вычисления
-    
-    ws[f'{start_col}{row_offset}'] = 'Deck (колода):'
-    ws[f'{get_column_letter(ord(start_col)+1)}{row_offset}'] = ''  # Формула будет добавлена
-    row_offset += 1
-    
-    ws[f'{start_col}{row_offset}'] = 'PlayerCards:'
-    ws[f'{get_column_letter(ord(start_col)+1)}{row_offset}'] = ''
-    row_offset += 1
-    
-    ws[f'{start_col}{row_offset}'] = 'DealerCards:'
-    ws[f'{get_column_letter(ord(start_col)+1)}{row_offset}'] = ''
-    row_offset += 1
-    
-    ws[f'{start_col}{row_offset}'] = 'PlayerTotal:'
-    ws[f'{get_column_letter(ord(start_col)+1)}{row_offset}'] = ''
-    row_offset += 1
-    
-    ws[f'{start_col}{row_offset}'] = 'DealerTotal:'
-    ws[f'{get_column_letter(ord(start_col)+1)}{row_offset}'] = ''
-    row_offset += 1
-    
-    ws[f'{start_col}{row_offset}'] = 'Проверка уникальности колоды:'
-    ws[f'{get_column_letter(ord(start_col)+1)}{row_offset}'] = ''
-    row_offset += 1
-    
-    ws[f'{start_col}{row_offset}'] = 'Первые 10 карт колоды:'
-    row_offset += 1
-    for i in range(10):
-        ws[f'{get_column_letter(ord(start_col)+i%5)}{row_offset + i//5}'] = f'Карта {i+1}:'
-        ws[f'{get_column_letter(ord(start_col)+i%5+1)}{row_offset + i//5}'] = ''
-    
-    # === СОЗДАНИЕ ИМЕНОВАННЫХ ДИАПАЗОНОВ ===
-    # Определяем основные формулы
-    
-    # Формула для генерации детерминированной колоды
-    deck_formula = (
-        '=LET('
-        'seed, Game!$B$3,'
-        'base, SEQUENCE(52),'
-        'hash1, MOD((base + seed) * 34999 + 12345, 1048576),'
-        'hash2, MOD((base + seed) * 7919 + 104729, 1048576),'
-        'SORTBY(base, hash1, 1, hash2, 1)'
-        ')'
-    )
-    
-    # Формула PlayerN с защитой от некорректных значений
-    player_n_formula = '=MIN(MAX(Game!$B$4, 2), 20)'
-    
-    # Формула Stand
-    stand_formula = '=Game!$B$5'
-    
-    # Формула карт игрока
-    player_cards_formula = (
-        '=LET('
-        'deck, Deck,'
-        'n, PlayerN,'
-        'TAKE(deck, n)'
-        ')'
-    )
-    
-    # Формула оставшейся колоды после игрока
-    remaining_formula = (
-        '=LET('
-        'deck, Deck,'
-        'n, PlayerN,'
-        'DROP(deck, n)'
-        ')'
-    )
-    
-    # LAMBDA функция для подсчёта очков руки
-    hand_total_lambda = (
-        '=LAMBDA(cards,'
-        'LET('
-        'ranks, MOD(cards - 1, 13) + 1,'
-        'values, IF(ranks = 1, 11, IF(ranks > 10, 10, ranks)),'
-        'total, SUM(values),'
-        'aces, SUM(--(ranks = 1)),'
-        'reduction, IF(total <= 21, 0, MIN(aces, ROUNDUP((total - 21) / 10, 0))),'
-        'total - 10 * reduction'
-        ')'
-    )
-    
-    # Формула суммы очков игрока
-    player_total_formula = '=HandTotal(PlayerCards)'
-    
-    # LAMBDA функция для получения названия карты
-    card_name_lambda = (
-        '=LAMBDA(c,'
-        'LET('
-        'r, MOD(c - 1, 13) + 1,'
-        's, INT((c - 1) / 13) + 1,'
-        'rankNames, {"A","2","3","4","5","6","7","8","9","10","J","Q","K"},'
-        'suitNames, {"♠","♥","♦","♣"},'
-        'INDEX(rankNames, r) & INDEX(suitNames, s)'
-        ')'
-    )
-    
-    # LAMBDA функция для отображения руки
-    hand_display_lambda = (
-        '=LAMBDA(hand,'
-        'IF(COUNT(hand) = 0, "", TEXTJOIN("  ", TRUE, MAP(hand, CardName)))'
-    )
-    
-    # Формула отображения руки игрока
-    player_display_formula = '=HandDisplay(PlayerCards)'
-    
-    # Формула для определения количества карт дилера (дилер берёт до 17)
-    dealer_n_formula = (
-        '=LET('
-        'remaining, Remaining,'
-        'maxCards, COUNT(remaining),'
-        'testCounts, SEQUENCE(maxCards, 1, 1, 1),'
-        'totals, MAP(testCounts, LAMBDA(n, HandTotal(TAKE(remaining, n)))),\n'
-        'validIdx, FILTER(testCounts, (totals >= 17) + (totals > 21) + (testCounts = maxCards)),\n'
-        'IF(COUNT(validIdx) = 0, 2, MIN(validIdx))'
-        ')'
-    )
-    
-    # Формула карт дилера
-    dealer_cards_formula = (
-        '=LET('
-        'remaining, Remaining,'
-        'n, DealerN,'
-        'TAKE(remaining, n)'
-        ')'
-    )
-    
-    # Формула суммы очков дилера
-    dealer_total_formula = '=HandTotal(DealerCards)'
-    
-    # Формула проверки натурального блэкджека у игрока
-    player_blackjack_formula = (
-        '=LET('
-        'cards, PlayerCards,'
-        'n, COUNT(cards),'
-        'IF(n <> 2, FALSE,'
-        'LET('
-        'r1, MOD(INDEX(cards, 1) - 1, 13) + 1,'
-        'r2, MOD(INDEX(cards, 2) - 1, 13) + 1,'
-        'v1, IF(r1 = 1, 11, IF(r1 > 10, 10, r1)),'
-        'v2, IF(r2 = 1, 11, IF(r2 > 10, 10, r2)),'
-        '(v1 + v2 = 21)'
-        ')'
-        ')'
-        ')'
-    )
-    
-    # Формула результата игры
-    result_formula = (
-        '=LET('
-        'pTotal, PlayerTotal,'
-        'dTotal, DealerTotal,'
-        'stand, Stand,'
-        'pBJ, PlayerBlackjack,'
-        'IF(pTotal > 21, "Перебор игрока",'
-        'IF(stand = FALSE,'
-        'IF(pBJ, "Блэкджек! Можно остановиться", "Можно взять ещё карту"),'
-        'IFS('
-        'pBJ AND (dTotal <> 21 OR COUNT(DealerCards) > 2), "Блэкджек! Вы выиграли",'
-        'dTotal > 21, "Дилер перебрал",'
-        'pTotal = dTotal, "Ничья",'
-        'pTotal > dTotal, "Вы выиграли",'
-        'TRUE, "Дилер выиграл"'
-        ')'
-        ')'
-        ')'
-    )
-    
-    # Формула видимой карты дилера (до Stand показываем только первую)
-    dealer_visible_formula = (
-        '=IF(COUNT(DealerCards) = 0, "", '
-        'IF(Stand = FALSE, '
-        'CardName(INDEX(DealerCards, 1)) & "  ?", '
-        'HandDisplay(DealerCards)'
-        ')'
-        ')'
-    )
-    
-    # Формула полной руки дилера (для отображения после Stand)
-    dealer_full_display_formula = '=IF(Stand, HandDisplay(DealerCards), "")'
-    
-    # Формула отображения очков дилера (скрыто до Stand)
-    dealer_total_display_formula = '=IF(Stand, DealerTotal, "?")'
-    
-    # Проверка уникальности колоды
-    uniqueness_check_formula = '=ROWS(UNIQUE(Deck)) = 52'
-    
-    # Проверка диапазона карт
-    min_card_formula = '=MIN(Deck)'
-    max_card_formula = '=MAX(Deck)'
-    
-    # Проверка отсутствия пересечений
-    no_overlap_formula = '=SUM(--(ISNUMBER(MATCH(PlayerCards, DealerCards, 0)))) = 0'
-    
-    # Добавляем именованные диапазоны в книгу через DefinedName
-    row = 3
-    col_g = ord(start_col)
-    
-    def add_named_range(name, cell_ref):
-        defined_name = DefinedName(name, attr_text=f"Game!{cell_ref}")
-        wb.defined_names[defined_name.name] = defined_name
-    
-    # Размещаем формулы в служебной области
-    ws[f'{get_column_letter(col_g+1)}{row}'] = deck_formula
-    add_named_range('Deck', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = player_n_formula
-    add_named_range('PlayerN', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = stand_formula
-    add_named_range('Stand', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = player_cards_formula
-    add_named_range('PlayerCards', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = remaining_formula
-    add_named_range('Remaining', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    # LAMBDA функции
-    ws[f'{get_column_letter(col_g+1)}{row}'] = hand_total_lambda
-    add_named_range('HandTotal', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = player_total_formula
-    add_named_range('PlayerTotal', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = card_name_lambda
-    add_named_range('CardName', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = hand_display_lambda
-    add_named_range('HandDisplay', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = dealer_n_formula
-    add_named_range('DealerN', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = dealer_cards_formula
-    add_named_range('DealerCards', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = dealer_total_formula
-    add_named_range('DealerTotal', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = player_blackjack_formula
-    add_named_range('PlayerBlackjack', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = result_formula
-    add_named_range('Result', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = dealer_visible_formula
-    add_named_range('DealerVisible', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = dealer_full_display_formula
-    add_named_range('DealerFullDisplay', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = dealer_total_display_formula
-    add_named_range('DealerTotalDisplay', f'${get_column_letter(col_g+1)}${row}')
-    row += 1
-    
-    # Проверки
-    ws[f'{get_column_letter(col_g+1)}{row}'] = uniqueness_check_formula
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = min_card_formula
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = max_card_formula
-    row += 1
-    
-    ws[f'{get_column_letter(col_g+1)}{row}'] = no_overlap_formula
-    row += 1
-    
-    # Теперь заполняем основные ячейки формулами ссылающимися на именованные диапазоны
-    ws['B9'].value = '=PlayerDisplay'
-    ws['B10'].value = '=PlayerTotal'
-    ws['B14'].value = '=DealerVisible'
-    ws['B15'].value = '=DealerFullDisplay'
-    ws['B16'].value = '=DealerTotalDisplay'
-    ws['B20'].value = '=Result'
-    
-    # Заполняем служебную область первыми 10 картами
-    base_row = 25  # После заголовка "Первые 10 карт колоды:"
-    for i in range(10):
-        col = chr(ord(start_col) + (i % 5) + 1)
-        row_num = base_row + i // 5
-        cell = ws[f'{col}{row_num}']
-        cell.value = f'=IF(COUNT(Deck)>{i}, CardName(INDEX(Deck, {i+1})), "")'
-    
-    # Применяем стили
-    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ord(start_col)+2):
-        for cell in row:
-            cell.alignment = cell_alignment if cell.column <= 2 else left_alignment
-    
-    # Условное форматирование для результата
-    # Зелёный - победа
-    ws.conditional_formatting.add(
-        'B20',
-        FormulaRule(
-            formula=['OR(B20="Вы выиграли", B20="Блэкджек! Вы выиграли", B20="Дилер перебрал")'],
-            fill=green_fill
-        )
-    )
-    
-    # Красный - поражение/перебор
-    ws.conditional_formatting.add(
-        'B20',
-        FormulaRule(
-            formula=['OR(B20="Перебор игрока", B20="Дилер выиграл")'],
-            fill=red_fill
-        )
-    )
-    
-    # Жёлтый - ничья
-    ws.conditional_formatting.add(
-        'B20',
-        FormulaRule(
-            formula=['B20="Ничья"'],
-            fill=yellow_fill
-        )
-    )
-    
-    # Синий - игра продолжается
-    ws.conditional_formatting.add(
-        'B20',
-        FormulaRule(
-            formula=['OR(B20="Можно взять ещё карту", ISNUMBER(SEARCH("Блэкджек", B20)))'],
-            fill=blue_fill
-        )
-    )
-    
-    # Скрываем служебную колонку
-    ws.column_dimensions[start_col].hidden = True
-    ws.column_dimensions[chr(ord(start_col)+1)].hidden = True
-    ws.column_dimensions[chr(ord(start_col)+2)].hidden = True
-    ws.column_dimensions[chr(ord(start_col)+3)].hidden = True
-    ws.column_dimensions[chr(ord(start_col)+4)].hidden = True
-    ws.column_dimensions[chr(ord(start_col)+5)].hidden = True
-    
-    # Настраиваем ширину колонок
+    ws['C10'] = '=PlayerTotal'
+
+    ws['A12'] = 'Карта дилера (видимая):'
+    ws['C12'] = '=DealerVisibleDisplay'
+
+    ws['A13'] = 'Рука дилера (полная):'
+    ws['C13'] = '=DealerHandDisplay'
+
+    ws['A14'] = 'Очки дилера:'
+    ws['C14'] = '=DealerTotal'
+
+    ws['A16'] = 'РЕЗУЛЬТАТ:'
+    ws['A16'].font = title_font
+    ws['C16'] = '=GameResult'
+    ws['C16'].font = Font(size=14, bold=True)
+
+    ws.column_dimensions['C'].width = 45
+
+    # === УСЛОВНОЕ ФОРМАТИРОВАНИЕ ===
+    red_fill = PatternFill(start_color='FFCC0000', end_color='FFCC0000', fill_type='solid')
+    green_fill = PatternFill(start_color='FF00AA00', end_color='FF00AA00', fill_type='solid')
+    yellow_fill = PatternFill(start_color='FFFFFF00', end_color='FFFFFF00', fill_type='solid')
+    gray_fill = PatternFill(start_color='FFCCCCCC', end_color='FFCCCCCC', fill_type='solid')
+
+    # Перебор игрока - красный
+    cf_bust = FormulaRule(formula=['ISNUMBER(SEARCH("Перебор", C16))'], fill=red_fill)
+    ws.conditional_formatting.add('C16', cf_bust)
+
+    # Победа - зеленый
+    cf_win = FormulaRule(formula=['OR(ISNUMBER(SEARCH("выиграли", C16)), ISNUMBER(SEARCH("Дилер перебрал", C16)))'], fill=green_fill)
+    ws.conditional_formatting.add('C16', cf_win)
+
+    # Ничья - желтый
+    cf_push = FormulaRule(formula=['ISNUMBER(SEARCH("Ничья", C16))'], fill=yellow_fill)
+    ws.conditional_formatting.add('C16', cf_push)
+
+    # Игра продолжается - серый
+    cf_continue = FormulaRule(formula=['OR(ISNUMBER(SEARCH("можно", C16)), ISNUMBER(SEARCH("Можно", C16)))'], fill=gray_fill)
+    ws.conditional_formatting.add('C16', cf_continue)
+
+    # === ОТЛАДОЧНАЯ ОБЛАСТЬ ===
+    ws['A20'] = '=== ОТЛАДОЧНАЯ ОБЛАСТЬ (можно скрыть) ==='
+    ws['A21'] = 'Первые 10 карт колоды:'
+    ws['A22'] = '=TEXTJOIN(", ", TRUE, DeckDebug)'
+    ws['A23'] = 'Карт игрока (PlayerN):'
+    ws['C23'] = '=PlayerN'
+    ws['A24'] = 'Карт дилера (DealerN):'
+    ws['C24'] = '=DealerN'
+    ws['A25'] = 'Проверка уникальности колоды:'
+    ws['C25'] = '=IF(ROWS(UNIQUE(Deck))=52, "OK", "ERROR")'
+    ws['A26'] = 'Мин карты:'
+    ws['C26'] = '=MIN(Deck)'
+    ws['A27'] = 'Макс карты:'
+    ws['C27'] = '=MAX(Deck)'
+    ws['A28'] = 'Пересечение рук:'
+    ws['C28'] = '=SUM(--(ISNUMBER(MATCH(PlayerCardsRaw, DealerCardsRaw, 0))))'
+
+    # Настройка ширины столбцов
     ws.column_dimensions['A'].width = 30
-    ws.column_dimensions['B'].width = 40
-    ws.column_dimensions['C'].width = 15
-    ws.column_dimensions['D'].width = 15
-    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 45
+
+    # === ИМЕНОВАННЫЕ ДИАПАЗОНЫ (ФОРМУЛЫ) ===
     
-    # Сохраняем файл
-    filename = 'Blackjack_Formulas_Only.xlsx'
+    # PlayerN - количество карт игрока (ограниченное)
+    add_defined_name(wb, 'PlayerN', '=MIN(MAX(Game.$B$2, 2), 20)')
+    
+    # Stand - булево значение
+    add_defined_name(wb, 'Stand', '=Game.$B$3')
+    
+    # Seed - значение seed
+    add_defined_name(wb, 'SeedValue', '=Game.$B$1')
+    
+    # Deck - колода из 52 карт (детерминированное перемешивание)
+    deck_formula = '=LET(s,SeedValue,base,SEQUENCE(52),h1,MOD((base+s)*34999+12345,1048576),h2,MOD((base+s)*7919+104729,1048576),SORTBY(base,h1,1,h2,1))'
+    add_defined_name(wb, 'Deck', deck_formula)
+    
+    # DeckDebug - первые 10 карт для отладки
+    add_defined_name(wb, 'DeckDebug', '=TAKE(Deck,10)')
+    
+    # PlayerCardsRaw - карты игрока
+    add_defined_name(wb, 'PlayerCardsRaw', '=TAKE(Deck,PlayerN)')
+    
+    # Remaining - оставшиеся карты после игрока
+    add_defined_name(wb, 'Remaining', '=DROP(Deck,PlayerN)')
+    
+    # HandTotal LAMBDA - подсчет очков руки
+    hand_total_formula = '=LAMBDA(cards,LET(r,MOD(cards-1,13)+1,v,IF(r=1,11,IF(r>10,10,r)),s,SUM(v),a,SUM(--(r=1)),k,IF(s<=21,0,MIN(a,ROUNDUP((s-21)/10,0))),s-10*k))'
+    add_defined_name(wb, 'HandTotal', hand_total_formula)
+    
+    # PlayerTotal - очки игрока
+    add_defined_name(wb, 'PlayerTotal', '=HandTotal(PlayerCardsRaw)')
+    
+    # CardName LAMBDA - отображение карты
+    card_name_formula = '=LAMBDA(c,LET(r,MOD(c-1,13)+1,s,INT((c-1)/13)+1,CHOOSE(r,"A","2","3","4","5","6","7","8","9","10","J","Q","K")&CHOOSE(s,"♠","♥","♦","♣")))'
+    add_defined_name(wb, 'CardName', card_name_formula)
+    
+    # HandDisplay LAMBDA - отображение руки
+    hand_display_formula = '=LAMBDA(cards,IF(COUNTA(cards)=0,"",TEXTJOIN("  ",TRUE,MAP(cards,LAMBDA(x,CardName(x))))))'
+    add_defined_name(wb, 'HandDisplay', hand_display_formula)
+    
+    # PlayerHandDisplay - рука игрока текстом
+    add_defined_name(wb, 'PlayerHandDisplay', '=HandDisplay(PlayerCardsRaw)')
+    
+    # DealerNCalc LAMBDA - количество карт дилера (берет до 17)
+    dealer_n_simple = '=LAMBDA(remaining,LET(t2,IF(COUNTA(remaining)>=2,HandTotal(TAKE(remaining,2)),0),t3,IF(COUNTA(remaining)>=3,HandTotal(TAKE(remaining,3)),0),t4,IF(COUNTA(remaining)>=4,HandTotal(TAKE(remaining,4)),0),t5,IF(COUNTA(remaining)>=5,HandTotal(TAKE(remaining,5)),0),t6,IF(COUNTA(remaining)>=6,HandTotal(TAKE(remaining,6)),0),t7,IF(COUNTA(remaining)>=7,HandTotal(TAKE(remaining,7)),0),t8,IF(COUNTA(remaining)>=8,HandTotal(TAKE(remaining,8)),0),t9,IF(COUNTA(remaining)>=9,HandTotal(TAKE(remaining,9)),0),t10,IF(COUNTA(remaining)>=10,HandTotal(TAKE(remaining,10)),0),t11,IF(COUNTA(remaining)>=11,HandTotal(TAKE(remaining,11)),0),t12,IF(COUNTA(remaining)>=12,HandTotal(TAKE(remaining,12)),0),IF(t2>=17,2,IF(t3>=17,3,IF(t4>=17,4,IF(t5>=17,5,IF(t6>=17,6,IF(t7>=17,7,IF(t8>=17,8,IF(t9>=17,9,IF(t10>=17,10,IF(t11>=17,11,12))))))))))))'
+    add_defined_name(wb, 'DealerNCalc', dealer_n_simple)
+    
+    # DealerN - итоговое количество карт дилера (только если Stand=TRUE)
+    add_defined_name(wb, 'DealerN', '=IF(Stand,DealerNCalc(Remaining),2)')
+    
+    # DealerCardsRaw - карты дилера
+    add_defined_name(wb, 'DealerCardsRaw', '=TAKE(Remaining,DealerN)')
+    
+    # DealerTotal - очки дилера
+    add_defined_name(wb, 'DealerTotal', '=IF(Stand,HandTotal(DealerCardsRaw),HandTotal(TAKE(Remaining,1)))')
+    
+    # DealerVisibleDisplay - видимая карта дилера
+    add_defined_name(wb, 'DealerVisibleDisplay', '=IF(Stand,HandDisplay(DealerCardsRaw),CardName(INDEX(Remaining,1))&"  ?")')
+    
+    # DealerHandDisplay - полная рука дилера
+    add_defined_name(wb, 'DealerHandDisplay', '=IF(Stand,HandDisplay(DealerCardsRaw),"?")')
+    
+    # GameResult - результат игры
+    game_result_formula = '=LET(p,PlayerTotal,d,IF(Stand,DealerTotal,0),IF(p>21,"Перебор игрока",IF(Stand=FALSE,"Можно взять ещё карту",IFS(d>21,"Дилер перебрал",p>d,"Вы выиграли",p=d,"Ничья",TRUE,"Дилер выиграл"))))'
+    add_defined_name(wb, 'GameResult', game_result_formula)
+
+    # Сохраняем книгу
     wb.save(filename)
+    print(f'Файл {filename} успешно создан!')
     return filename
 
 if __name__ == '__main__':
-    filename = create_blackjack_excel()
-    print(f"Файл создан: {filename}")
-    print("Откройте файл в Excel 365 или Excel 2021+ для лучшей совместимости.")
+    create_blackjack_file()
